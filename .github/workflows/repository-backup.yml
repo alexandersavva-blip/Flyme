@@ -1,0 +1,40 @@
+name: Repository backup (Git bundle)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/repository-backup.yml
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out complete repository history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Create and verify independent Git backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/git-backup"
+          git bundle create "${RUNNER_TEMP}/git-backup/Flyme.bundle" --all
+          git init -q "${RUNNER_TEMP}/bundle-verify"
+          git -C "${RUNNER_TEMP}/bundle-verify" bundle verify "${RUNNER_TEMP}/git-backup/Flyme.bundle"
+          git rev-parse HEAD > "${RUNNER_TEMP}/git-backup/HEAD_COMMIT.txt"
+          (cd "${RUNNER_TEMP}/git-backup" && sha256sum Flyme.bundle > SHA256SUMS)
+          echo "BACKUP_BUNDLE_VERIFIED=YES"
+      - name: Publish transfer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Flyme-git-backup
+          path: ${{ runner.temp }}/git-backup/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
